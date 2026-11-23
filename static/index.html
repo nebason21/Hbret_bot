@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Hbret Video Bingo</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { --bg:#0b0f1e; --card:#161d38; --accent:#00e5ff; --gold:#ffd700; --win:#00e676; }
+  * { box-sizing:border-box; font-family:system-ui,sans-serif; user-select:none; }
+  body { margin:0; background:radial-gradient(circle at top,#1a244d,var(--bg)); color:#fff; padding:10px; padding-bottom:75px; }
+  .top { display:flex; justify-content:space-between; align-items:center; background:var(--card); padding:10px 14px; border-radius:14px; border:1px solid #2b386e; margin-bottom:10px; }
+  .badge { background:#0d1326; padding:6px 12px; border-radius:20px; font-weight:700; color:var(--gold); border:1px solid #ffd70055; }
+  .stage { position:relative; background:linear-gradient(135deg,#131b3a,#0d1224); border-radius:18px; padding:12px; border:1px solid #00e5ff44; text-align:center; margin-bottom:10px; overflow:hidden; }
+  canvas#drum { width:100%; height:140px; display:block; }
+  .prize-bar { display:flex; justify-content:space-around; font-size:13px; margin-top:6px; color:#b8c7ff; }
+  .recent { display:flex; gap:6px; justify-content:center; margin-top:8px; min-height:34px; }
+  .rball { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; background:linear-gradient(145deg,#ff4081,#c51162); box-shadow:0 0 10px #ff408188; animation:pop .3s ease; }
+  @keyframes pop { from{transform:scale(0)} to{transform:scale(1)} }
+  .grid5 { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; background:var(--card); padding:10px; border-radius:16px; border:2px solid #2b386e; }
+  .hdr { text-align:center; font-weight:900; font-size:18px; color:var(--accent); padding-bottom:4px; }
+  .cell { aspect-ratio:1; border-radius:10px; background:#0f152b; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:17px; border:1px solid #2c3a75; cursor:pointer; transition:.2s; }
+  .cell.marked { background:linear-gradient(145deg,#00e676,#00b248); color:#041a0d; transform:scale(.95); box-shadow:0 0 12px #00e67688; }
+  .cell.free { background:linear-gradient(145deg,#ffd700,#ff9100); color:#1a1000; font-size:12px; }
+  .picker { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; max-height:220px; overflow-y:auto; padding:8px; background:var(--card); border-radius:14px; }
+  .cbtn { padding:10px 0; border-radius:8px; border:none; background:#232f5e; color:#fff; font-weight:700; cursor:pointer; }
+  .cbtn.taken { background:#ff174433; color:#ff5252; cursor:not-allowed; }
+  .btn-main { width:100%; padding:14px; border:none; border-radius:14px; font-size:18px; font-weight:900; margin-top:10px; cursor:pointer; background:linear-gradient(90deg,#ffd700,#ff9100); color:#1a1000; box-shadow:0 4px 18px #ff910066; }
+  .tabs { position:fixed; bottom:0; left:0; right:0; display:flex; background:#0d1224; border-top:1px solid #2b386e; }
+  .tab { flex:1; padding:12px; text-align:center; font-weight:700; color:#8899cc; cursor:pointer; }
+  .tab.active { color:var(--accent); border-top:2px solid var(--accent); }
+  .box { background:var(--card); padding:14px; border-radius:14px; display:none; }
+  .box.show { display:block; }
+  input,select { width:100%; padding:11px; margin:6px 0 12px; border-radius:10px; border:1px solid #2b386e; background:#0b0f1e; color:#fff; }
+  .win-modal { position:fixed; inset:0; background:#000000cc; display:none; align-items:center; justify-content:center; z-index:99; }
+  .win-box { background:linear-gradient(145deg,#1a2657,#0f1530); border:2px solid var(--gold); padding:26px; border-radius:20px; text-align:center; animation:pop .4s ease; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div><b>🏆 Hbret Bingo</b><br><small id="uname" style="color:#8899cc">Loading...</small></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button onclick="soundOn=!soundOn;this.innerText=soundOn?'🔊':'🔇'" style="background:none;border:none;font-size:20px;cursor:pointer">🔊</button>
+    <div class="badge" id="bal">0 ETB</div>
+  </div>
+</div>
+
+<div id="tab-play" class="box show" style="background:none;padding:0">
+  <div class="stage">
+    <canvas id="drum" width="360" height="140"></canvas>
+    <div class="prize-bar">
+      <span>🎯 ሁኔታ: <b id="st" style="color:var(--accent)">Waiting</b></span>
+      <span>🏆 ሽልማት (80%): <b id="prize" style="color:var(--gold)">0 ETB</b></span>
+      <span>👥 <b id="pcnt">0</b></span>
+    </div>
+    <div class="recent" id="recent"></div>
+  </div>
+
+  <div id="pick-area">
+    <div style="margin-bottom:6px;font-weight:700">🎟 የእድል ካርድ ይምረጡ (25 ETB)፦</div>
+    <div class="picker" id="picker"></div>
+  </div>
+
+  <div id="card-area" style="display:none">
+    <div class="grid5" id="grid"></div>
+    <button class="btn-main" onclick="claimBingo()">🏆 BINGO! (አሸነፍኩ)</button>
+  </div>
+</div>
+
+<div id="tab-dep" class="box">
+  <h3>💰 ገንዘብ ማስገባት (Deposit)</h3>
+  <p style="font-size:13px;color:#b8c7ff">Telebirr: <b>09XXXXXXXX</b><br>CBE: <b>1000XXXXXXXXX</b></p>
+  <select id="d_method"><option>Telebirr</option><option>CBE</option></select>
+  <input id="d_amt" type="number" placeholder="መጠን (ETB) ለምሳሌ 100">
+  <input id="d_tx" placeholder="Transaction ID (ለምሳሌ BJH83K...)">
+  <button class="btn-main" onclick="sendDeposit()">✅ አስገባ (Send to Admin)</button>
+</div>
+
+<div id="tab-inv" class="box">
+  <h3>👥 ጓደኞችዎን ይጋብዙ</h3>
+  <p style="font-size:14px;color:#b8c7ff">ይህንን ሊንክ ለጓደኞችዎ በመላክ አዳዲስ ተጫዋቾችን ይጋብዙ፦</p>
+  <input id="reflink" readonly>
+  <button class="btn-main" onclick="navigator.clipboard.writeText(reflink.value);tg.showAlert('ሊንኩ ተቀድቷል!')">📋 ሊንኩን ቅዳ (Copy)</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('play',this)">🎮 ጨዋታ</div>
+  <div class="tab" onclick="sw('dep',this)">💰 Deposit</div>
+  <div class="tab" onclick="sw('inv',this)">👥 Invite</div>
+</div>
+
+<div class="win-modal" id="winModal"><div class="win-box">
+  <h1 style="margin:0;font-size:42px">🎉🏆🎉</h1>
+  <h2 id="wname" style="color:var(--gold)"></h2>
+  <p id="wprize" style="font-size:20px;font-weight:800;color:var(--win)"></p>
+</div></div>
+
+<script>
+const tg = window.Telegram.WebApp; tg.expand();
+const initData = tg.initData || "";
+let soundOn = true, myGrid = null, drawnSet = new Set(), currentBall = null;
+
+// --- WebAudio Arcade Sound ---
+function beep(freq=650){
+  if(!soundOn) return;
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = freq; o.start();
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    o.stop(ctx.currentTime + 0.2);
+  }catch(e){}
+}
+
+// --- Animated Spinning Ball Cage (Canvas) ---
+const cv = document.getElementById("drum"), cx = cv.getContext("2d");
+const miniBalls = Array.from({length:14},(_,i)=>({
+  x:60+Math.random()*240, y:30+Math.random()*80,
+  vx:(Math.random()-.5)*4, vy:(Math.random()-.5)*4,
+  c:`hsl(${i*26},85%,55%)`, n:Math.floor(Math.random()*75)+1
+}));
+function anim(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  miniBalls.forEach(b=>{
+    b.x+=b.vx; b.y+=b.vy;
+    if(b.x<20||b.x>340) b.vx*=-1;
+    if(b.y<20||b.y>120) b.vy*=-1;
+    cx.beginPath(); cx.arc(b.x,b.y,11,0,Math.PI*2);
+    cx.fillStyle=b.c; cx.fill();
+    cx.fillStyle="#fff"; cx.font="bold 9px sans-serif"; cx.textAlign="center";
+    cx.fillText(b.n,b.x,b.y+3);
+  });
+  if(currentBall!==null){
+    const lbl = ["B","I","N","G","O"][Math.floor((currentBall-1)/15)] + "-" + currentBall;
+    const grd = cx.createRadialGradient(170,60,8,180,70,42);
+    grd.addColorStop(0,"#fff"); grd.addColorStop(0.35,"#ffd700"); grd.addColorStop(1,"#ff6d00");
+    cx.beginPath(); cx.arc(180,70,42,0,Math.PI*2); cx.fillStyle=grd; cx.fill();
+    cx.lineWidth=3; cx.strokeStyle="#fff"; cx.stroke();
+    cx.fillStyle="#1a1000"; cx.font="900 22px sans-serif"; cx.textAlign="center";
+    cx.fillText(lbl,180,78);
+  }
+  requestAnimationFrame(anim);
+}
+anim();
+
+async function loadMe(){
+  const r = await fetch("/api/me",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData})});
+  if(!r.ok) return;
+  const u = await r.json();
+  document.getElementById("uname").innerText = u.name;
+  document.getElementById("bal").innerText = u.balance + " ETB";
+  document.getElementById("reflink").value = `https://t.me/${tg.initDataUnsafe?.receiver?.username||'YourBot'}?start=ref_${u.id}`;
+}
+loadMe();
+
+function renderPicker(taken){
+  const p = document.getElementById("picker"); p.innerHTML = "";
+  for(let i=1;i<=48;i++){
+    const b = document.createElement("button");
+    b.className = "cbtn" + (taken.includes(i)?" taken":"");
+    b.innerText = "#"+i;
+    if(!taken.includes(i)) b.onclick = ()=>buyCard(i);
+    p.appendChild(b);
+  }
+}
+
+async function buyCard(no){
+  const r = await fetch("/api/buy_card",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData,card_no:no})});
+  const d = await r.json();
+  if(!r.ok) return tg.showAlert(d.detail || "Error");
+  document.getElementById("bal").innerText = d.balance + " ETB";
+  myGrid = d.grid;
+  document.getElementById("pick-area").style.display="none";
+  document.getElementById("card-area").style.display="block";
+  drawGrid();
+}
+
+function drawGrid(){
+  const g = document.getElementById("grid"); g.innerHTML="";
+  ["B","I","N","G","O"].forEach(l=>{const h=document.createElement("div");h.className="hdr";h.innerText=l;g.appendChild(h);});
+  myGrid.forEach(row=>row.forEach(v=>{
+    const c = document.createElement("div");
+    const isFree = v===0;
+    c.className = "cell" + (isFree?" free marked":"") + (drawnSet.has(v)?" marked":"");
+    c.innerText = isFree ? "FREE" : v;
+    c.onclick = ()=>{ if(!isFree) c.classList.toggle("marked"); };
+    g.appendChild(c);
+  }));
+}
+
+async function claimBingo(){
+  const r = await fetch("/api/claim_bingo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData})});
+  const d = await r.json();
+  if(!r.ok) tg.showAlert(d.detail || "ገና አልሞላም!");
+}
+
+async function sendDeposit(){
+  const r = await fetch("/api/deposit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData,method:d_method.value,amount:d_amt.value,tx_ref:d_tx.value})});
+  if(r.ok){ tg.showAlert("✅ ጥያቄዎ ለAdmin ተልኳል!"); d_amt.value=""; d_tx.value=""; }
+}
+
+function sw(name, el){
+  document.querySelectorAll(".box").forEach(b=>b.classList.remove("show"));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.getElementById("tab-"+name).classList.add("show"); el.classList.add("active");
+}
+
+// --- WebSocket Live Sync ---
+const proto = location.protocol==="https:"?"wss":"ws";
+const ws = new WebSocket(`${proto}://${location.host}/ws`);
+ws.onmessage = (e)=>{
+  const m = JSON.parse(e.data);
+  if(m.type==="state"){
+    st.innerText = m.status==="waiting" ? `ይጀምራል (${m.countdown}s)` : "በመጫወት ላይ...";
+    prize.innerText = m.winner_prize + " ETB";
+    pcnt.innerText = m.players_count;
+    drawnSet = new Set(m.drawn);
+    if(m.status==="waiting" && myGrid && m.drawn.length===0){
+      myGrid = null; currentBall = null;
+      document.getElementById("pick-area").style.display="block";
+      document.getElementById("card-area").style.display="none";
+    }
+    if(!myGrid) renderPicker(m.taken_cards);
+  } else if(m.type==="ball"){
+    currentBall = m.ball; drawnSet = new Set(m.drawn); beep(720);
+    const rec = document.getElementById("recent");
+    rec.innerHTML = m.drawn.slice(-6).reverse().map(n=>`<div class="rball">${n}</div>`).join("");
+    if(myGrid) drawGrid();
+  } else if(m.type==="winner"){
+    beep(980);
+    document.getElementById("wname").innerText = `${m.name} (Card #${m.card_no}) አሸነፈ!`;
+    document.getElementById("wprize").innerText = `+${m.prize} ETB`;
+    document.getElementById("winModal").style.display="flex";
+    loadMe();
+    setTimeout(()=>document.getElementById("winModal").style.display="none",4500);
+  }
+};
+</script>
+</body>
+</html>
